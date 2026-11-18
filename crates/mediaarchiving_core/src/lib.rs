@@ -21,6 +21,8 @@ pub mod policy;
 pub mod probe;
 pub mod report;
 pub mod scan;
+/// Stage 2 — apply, verify and original handling. Interfaces only.
+pub mod stage2;
 
 pub use analysis::{analyse, Analysis, Decision, RiskTier};
 pub use inventory::Inventory;
