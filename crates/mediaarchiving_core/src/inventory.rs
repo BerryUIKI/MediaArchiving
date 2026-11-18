@@ -123,9 +123,11 @@ impl Inventory {
     pub fn meta(&self, key: &str) -> Result<Option<String>> {
         Ok(self
             .conn
-            .query_row("SELECT value FROM meta WHERE key = ?1", params![key], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT value FROM meta WHERE key = ?1",
+                params![key],
+                |row| row.get(0),
+            )
             .optional()?)
     }
 
@@ -342,7 +344,8 @@ fn normalise_run_root(path: &Path) -> PathBuf {
     }
 }
 
-fn row_to_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<FileRecord> {    let path: String = row.get(0)?;
+fn row_to_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<FileRecord> {
+    let path: String = row.get(0)?;
     let kind: String = row.get(3)?;
     Ok(FileRecord {
         path: PathBuf::from(path),

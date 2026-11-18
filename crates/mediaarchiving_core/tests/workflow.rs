@@ -24,7 +24,7 @@ fn tiny_png() -> Vec<u8> {
     out.extend_from_slice(&1u32.to_be_bytes()); // width
     out.extend_from_slice(&1u32.to_be_bytes()); // height
     out.extend_from_slice(&[8, 6, 0, 0, 0]); // bit depth, colour type, etc.
-    // CRC covers the chunk type and data: bytes 12..29.
+                                             // CRC covers the chunk type and data: bytes 12..29.
     let crc = crc32(&out[12..29]);
     out.extend_from_slice(&crc.to_be_bytes());
     // IEND
@@ -99,7 +99,10 @@ fn fixture(root: &Path) -> Vec<mediaarchiving_core::inventory::FileRecord> {
     // A PNG — lossless source, high savings expected.
     write(&root.join("set_a/graphic.png"), &tiny_png());
     // A GIF — low priority.
-    write(&root.join("set_b/anim.gif"), b"GIF89a\x01\x00\x01\x00\x00\x00\x00;");
+    write(
+        &root.join("set_b/anim.gif"),
+        b"GIF89a\x01\x00\x01\x00\x00\x00\x00;",
+    );
 
     let run = mediaarchiving_core::RunDir::new(root.join(".run"));
     run.ensure().unwrap();
@@ -125,7 +128,8 @@ fn fixture(root: &Path) -> Vec<mediaarchiving_core::inventory::FileRecord> {
 }
 
 #[test]
-fn probe_reads_the_real_container_not_the_extension() {    let dir = tempfile::tempdir().unwrap();
+fn probe_reads_the_real_container_not_the_extension() {
+    let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     // A PNG named .jpg — common in scraped libraries.
     write(&root.join("mislabelled.jpg"), &tiny_png());
@@ -135,7 +139,10 @@ fn probe_reads_the_real_container_not_the_extension() {    let dir = tempfile::t
         .iter()
         .find(|r| r.path.ends_with("mislabelled.jpg"))
         .expect("file was not inventoried");
-    assert_eq!(record.container, "png", "magic bytes must win over extension");
+    assert_eq!(
+        record.container, "png",
+        "magic bytes must win over extension"
+    );
     assert!(record.extension_mismatch, "mismatch should be flagged");
 }
 
@@ -194,8 +201,10 @@ fn dataset_intent_refuses_lossy_transcoding() {
     let root = dir.path();
     let records = fixture(root);
 
-    let mut policy = Policy::default();
-    policy.intent = Intent::Dataset;
+    let policy = Policy {
+        intent: Intent::Dataset,
+        ..Policy::default()
+    };
     let analysis = analyse(&records, &policy);
 
     let photo = analysis

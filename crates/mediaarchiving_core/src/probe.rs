@@ -14,11 +14,13 @@ use serde::{Deserialize, Serialize};
 /// extension — libraries are full of mislabelled files.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum MediaKind {
     Image,
     Video,
     Audio,
     Archive,
+    #[default]
     Other,
 }
 
@@ -73,12 +75,6 @@ pub struct Probe {
     /// Set when the header could not be read; the file is quarantined.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
-}
-
-impl Default for MediaKind {
-    fn default() -> Self {
-        MediaKind::Other
-    }
 }
 
 /// Probe a file. Never fails: read errors are recorded in `Probe::error` so a
@@ -344,7 +340,7 @@ fn read_mp4_duration(file: &mut File, head: &[u8]) -> Option<u64> {
                 }
                 (
                     u32::from_be_bytes(body[20..24].try_into().ok()?) as u64,
-                    u64::from_be_bytes(body[24..32.min(body.len())].try_into().ok()?) as u64,
+                    u64::from_be_bytes(body[24..32.min(body.len())].try_into().ok()?),
                 )
             } else {
                 (

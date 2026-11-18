@@ -82,7 +82,7 @@ pub fn scan(inventory: &Inventory, options: &ScanOptions) -> Result<ScanSummary>
     // SQLite files is wrong in a way that is easy to miss.
     let mut skip_paths = options.skip_paths.clone();
     let run_root = inventory.run_root().to_path_buf();
-    if !skip_paths.iter().any(|skip| *skip == run_root) {
+    if !skip_paths.contains(&run_root) {
         skip_paths.push(run_root);
     }
 
@@ -241,7 +241,13 @@ pub fn group_duplicates(inventory: &Inventory) -> Result<DuplicateStats> {
         if files.len() < 2 {
             continue;
         }
-        files.sort_by_key(|record| (record.path.as_os_str().len(), record.mtime, record.path.clone()));
+        files.sort_by_key(|record| {
+            (
+                record.path.as_os_str().len(),
+                record.mtime,
+                record.path.clone(),
+            )
+        });
 
         group_id += 1;
         stats.groups += 1;
