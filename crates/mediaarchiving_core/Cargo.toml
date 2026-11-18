@@ -21,3 +21,4 @@ imagesize.workspace = true
 
 [dev-dependencies]
 tempfile = "3.10"
+walkdir.workspace = true

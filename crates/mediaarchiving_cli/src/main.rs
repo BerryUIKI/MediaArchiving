@@ -86,6 +86,8 @@ fn main() -> Result<()> {
             let options = ScanOptions {
                 roots: roots.clone(),
                 force,
+                // Protect the run directory even when it sits inside a root.
+                skip_paths: vec![std::path::absolute(&run_dir.root).unwrap_or(run_dir.root.clone())],
                 ..ScanOptions::default()
             };
             println!("Walking {} root(s)…", roots.len());

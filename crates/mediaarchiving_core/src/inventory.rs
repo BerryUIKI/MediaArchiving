@@ -49,21 +49,31 @@ impl FileRecord {
 
 pub struct Inventory {
     conn: Connection,
+    /// Directory holding this inventory, so a scan can refuse to catalogue its
+    /// own bookkeeping when the run directory lives inside a scanned root.
+    run_root: PathBuf,
 }
 
 impl Inventory {
     /// Open (or create) the inventory at `path`.
     pub fn open(path: &Path) -> Result<Self> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
+        let parent = path.parent().unwrap_or(Path::new(".")).to_path_buf();
+        std::fs::create_dir_all(&parent)?;
         let conn = Connection::open(path)
             .with_context(|| format!("opening inventory at {}", path.display()))?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
-        let inv = Self { conn };
+        let inv = Self {
+            conn,
+            run_root: normalise_run_root(&parent),
+        };
         inv.migrate()?;
         Ok(inv)
+    }
+
+    /// The directory this inventory lives in. Scans must never catalogue it.
+    pub fn run_root(&self) -> &Path {
+        &self.run_root
     }
 
     fn migrate(&self) -> Result<()> {
@@ -267,24 +277,40 @@ impl Inventory {
         Ok(())
     }
 
-    /// Drop rows under `root` that were not touched during this scan pass.
-    pub fn prune_under(&self, root: &Path, seen: &std::collections::HashSet<PathBuf>) -> Result<usize> {
-        let prefix = root.to_string_lossy().to_string();
-        let mut stmt = self
-            .conn
-            .prepare("SELECT path FROM files WHERE path LIKE ?1")?;
-        let pattern = format!("{}%", prefix.replace('%', "%%"));
-        let rows = stmt.query_map(params![pattern], |row| {
+    /// Drop rows under `root` that were not seen during this scan pass.
+    ///
+    /// `seen` is every path the walk visited, so unchanged files are protected.
+    /// `skip_paths` are prefixes the walk refused to enter; their rows are left
+    /// alone rather than being mistaken for deletions.
+    ///
+    /// The containment test is done on components, not on a `LIKE` prefix:
+    /// `<root>2` must not be treated as living under `<root>`.
+    pub fn prune_under(
+        &self,
+        root: &Path,
+        seen: &std::collections::HashSet<PathBuf>,
+        skip_paths: &[PathBuf],
+    ) -> Result<usize> {
+        let mut stmt = self.conn.prepare("SELECT path FROM files")?;
+        let rows = stmt.query_map([], |row| {
             let path: String = row.get(0)?;
             Ok(PathBuf::from(path))
         })?;
+
         let mut to_delete = Vec::new();
         for path in rows {
             let path = path?;
+            if !path.starts_with(root) {
+                continue;
+            }
+            if skip_paths.iter().any(|skip| path.starts_with(skip)) {
+                continue;
+            }
             if !seen.contains(&path) {
                 to_delete.push(path);
             }
         }
+
         let tx = self.conn.unchecked_transaction()?;
         for path in &to_delete {
             tx.execute(
@@ -297,8 +323,26 @@ impl Inventory {
     }
 }
 
-fn row_to_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<FileRecord> {
-    let path: String = row.get(0)?;
+/// Canonicalise a directory for path-prefix comparisons.
+///
+/// `fs::canonicalize` on Windows returns a verbatim path (`\\?\C:\...`), while
+/// the paths produced by directory walks do not carry that prefix. Comparing
+/// the two directly silently never matches, so the prefix is stripped here —
+/// `starts_with` is component-wise, and the reminder of the path is identical.
+fn normalise_run_root(path: &Path) -> PathBuf {
+    let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let text = canonical.to_string_lossy().to_string();
+    let stripped = text
+        .strip_prefix(r"\\?\UNC\")
+        .map(|rest| format!(r"\\{rest}"))
+        .or_else(|| text.strip_prefix(r"\\?\").map(str::to_string));
+    match stripped {
+        Some(clean) => PathBuf::from(clean),
+        None => canonical,
+    }
+}
+
+fn row_to_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<FileRecord> {    let path: String = row.get(0)?;
     let kind: String = row.get(3)?;
     Ok(FileRecord {
         path: PathBuf::from(path),
