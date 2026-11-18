@@ -1,0 +1,30 @@
+[workspace]
+members = ["crates/mediaarchiving_core", "crates/mediaarchiving_cli"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["BerryUIKI"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/BerryUIKI/MediaArchiving"
+
+[workspace.dependencies]
+mediaarchiving_core = { path = "crates/mediaarchiving_core" }
+
+anyhow = "1.0"
+blake3 = "1.5"
+clap = { version = "4.5", features = ["derive"] }
+kamadak-exif = "0.6"
+rayon = "1.10"
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+walkdir = "2.5"
+imagesize = "0.13"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

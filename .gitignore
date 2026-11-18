@@ -1,0 +1,14 @@
+/target
+**/*.rs.bk
+node_modules/
+
+# Local run artefacts — never commit a scan of a real library
+/runs/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.html
+
+# OS noise
+.DS_Store
+Thumbs.db
