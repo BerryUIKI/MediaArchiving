@@ -86,9 +86,9 @@ pub fn build_plan(analysis: &Analysis) -> Plan {
         let mut part = 0usize;
 
         let flush = |batch_files: &mut Vec<&FileVerdict>,
-                         bytes: u64,
-                         part: &mut usize,
-                         batches: &mut Vec<Batch>| {
+                     bytes: u64,
+                     part: &mut usize,
+                     batches: &mut Vec<Batch>| {
             if batch_files.is_empty() {
                 return;
             }

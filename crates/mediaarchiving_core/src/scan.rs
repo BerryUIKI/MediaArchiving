@@ -25,6 +25,9 @@ pub struct ScanOptions {
     pub roots: Vec<PathBuf>,
     /// Directory names to skip entirely (matched on the final component).
     pub skip_dir_names: Vec<String>,
+    /// Absolute paths to skip wholesale. Used so the run directory can live
+    /// inside a scanned root without the inventory cataloguing itself.
+    pub skip_paths: Vec<PathBuf>,
     /// Re-probe every file even when size and mtime are unchanged.
     pub force: bool,
     /// How many files to gather before writing a batch.
@@ -42,6 +45,7 @@ impl Default for ScanOptions {
                 "$RECYCLE.BIN".to_string(),
                 "System Volume Information".to_string(),
             ],
+            skip_paths: Vec::new(),
             force: false,
             batch_size: 2_000,
         }
@@ -73,6 +77,15 @@ pub fn scan(inventory: &Inventory, options: &ScanOptions) -> Result<ScanSummary>
     let mut seen: HashSet<PathBuf> = HashSet::new();
     let mut pending: Vec<FileRecord> = Vec::with_capacity(options.batch_size);
 
+    // The run directory is never part of the library, whether or not the
+    // caller remembered to list it. An inventory that catalogues its own
+    // SQLite files is wrong in a way that is easy to miss.
+    let mut skip_paths = options.skip_paths.clone();
+    let run_root = inventory.run_root().to_path_buf();
+    if !skip_paths.contains(&run_root) {
+        skip_paths.push(run_root);
+    }
+
     for root in &options.roots {
         for entry in WalkDir::new(root)
             .follow_links(false)
@@ -80,6 +93,10 @@ pub fn scan(inventory: &Inventory, options: &ScanOptions) -> Result<ScanSummary>
             .filter_entry(|entry| {
                 if entry.depth() == 0 {
                     return true;
+                }
+                let path = entry.path();
+                if skip_paths.iter().any(|skip| path.starts_with(skip)) {
+                    return false;
                 }
                 let name = entry.file_name().to_string_lossy();
                 !options
@@ -137,8 +154,13 @@ pub fn scan(inventory: &Inventory, options: &ScanOptions) -> Result<ScanSummary>
     flush(inventory, &mut pending)?;
 
     // Remove anything that was in the inventory but has disappeared.
+    //
+    // `seen` holds every path the walk actually visited — including files that
+    // were skipped as unchanged. Pruning must be driven by "did the walk see
+    // this path", not by "did we write a row for it", or every unchanged file
+    // would be deleted from the inventory on the second run.
     for root in &options.roots {
-        summary.pruned += inventory.prune_under(root, &seen)?;
+        summary.pruned += inventory.prune_under(root, &seen, &skip_paths)?;
     }
     summary.pruned += inventory.prune_missing()?;
     summary.elapsed_ms = started.elapsed().as_millis();
@@ -219,7 +241,13 @@ pub fn group_duplicates(inventory: &Inventory) -> Result<DuplicateStats> {
         if files.len() < 2 {
             continue;
         }
-        files.sort_by_key(|record| (record.path.as_os_str().len(), record.mtime, record.path.clone()));
+        files.sort_by_key(|record| {
+            (
+                record.path.as_os_str().len(),
+                record.mtime,
+                record.path.clone(),
+            )
+        });
 
         group_id += 1;
         stats.groups += 1;

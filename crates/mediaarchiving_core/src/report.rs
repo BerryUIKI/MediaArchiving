@@ -18,7 +18,12 @@ use crate::policy::Policy;
 use crate::{human_bytes, RunDir};
 
 /// Render the report to `run.report()`.
-pub fn write_report(run: &RunDir, analysis: &Analysis, plan: &Plan, policy: &Policy) -> anyhow::Result<()> {
+pub fn write_report(
+    run: &RunDir,
+    analysis: &Analysis,
+    plan: &Plan,
+    policy: &Policy,
+) -> anyhow::Result<()> {
     let html = render(analysis, plan, policy, &run.root.to_string_lossy());
     std::fs::write(run.report(), html)?;
     Ok(())
@@ -123,24 +128,26 @@ verified before any bulk approval.</div>\n",
     );
 
     // ---- Container breakdown ----
-    html.push_str("<h2>By format</h2>\n<table><thead><tr>\
+    html.push_str(
+        "<h2>By format</h2>\n<table><thead><tr>\
 <th>Container</th><th class=\"num\">Files</th><th class=\"num\">Size</th>\
 <th class=\"num\">Candidates</th><th class=\"num\">Est. saving</th>\
-<th class=\"num\">Saving %</th></tr></thead><tbody>\n");
+<th class=\"num\">Saving %</th></tr></thead><tbody>\n",
+    );
 
     let mut containers: Vec<_> = t.by_container.iter().collect();
-    containers.sort_by(|a, b| b.1.bytes.cmp(&a.1.bytes));
+    containers.sort_by_key(|a| std::cmp::Reverse(a.1.bytes));
     for (name, stats) in containers {
         let pct = if stats.bytes > 0 {
             stats.saving_bytes as f64 / stats.bytes as f64 * 100.0
         } else {
             0.0
         };
-        let _ = write!(
+        let _ = writeln!(
             html,
             "<tr><td><code>{}</code></td><td class=\"num\">{}</td>\
 <td class=\"num\">{}</td><td class=\"num\">{}</td>\
-<td class=\"num\">{}</td><td class=\"num\">{:.1}%</td></tr>\n",
+<td class=\"num\">{}</td><td class=\"num\">{:.1}%</td></tr>",
             escape(name),
             stats.files,
             human_bytes(stats.bytes),
@@ -152,9 +159,11 @@ verified before any bulk approval.</div>\n",
     html.push_str("</tbody></table>\n");
 
     // ---- Risk distribution ----
-    html.push_str("<h2>Risk layering</h2>\n<p class=\"sub\">Batches are layered by risk first, \
+    html.push_str(
+        "<h2>Risk layering</h2>\n<p class=\"sub\">Batches are layered by risk first, \
 then split by directory, so the bulk of low-risk work can be approved in one sweep \
-while the files that could actually be damaged get individual attention.</p>\n");
+while the files that could actually be damaged get individual attention.</p>\n",
+    );
     html.push_str("<div class=\"cards\">\n");
     for tier in ["high", "medium", "low"] {
         let count = t.by_risk.get(tier).copied().unwrap_or(0);
@@ -184,18 +193,22 @@ while the files that could actually be damaged get individual attention.</p>\n")
     );
 
     if plan.batches.is_empty() {
-        html.push_str("<p class=\"sub\">No files qualified for transcoding under this policy.</p>\n");
+        html.push_str(
+            "<p class=\"sub\">No files qualified for transcoding under this policy.</p>\n",
+        );
     } else {
-        html.push_str("<table><thead><tr>\
+        html.push_str(
+            "<table><thead><tr>\
 <th>Batch</th><th>Risk</th><th>Directory</th><th class=\"num\">Files</th>\
 <th class=\"num\">Size</th><th class=\"num\">Est. saving</th>\
-</tr></thead><tbody>\n");
+</tr></thead><tbody>\n",
+        );
         for batch in &plan.batches {
-            let _ = write!(
+            let _ = writeln!(
                 html,
                 "<tr><td><code>{}</code></td><td><span class=\"tag t-{}\">{}</span></td>\
 <td>{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td>\
-<td class=\"num\">{}</td></tr>\n",
+<td class=\"num\">{}</td></tr>",
                 escape(&batch.id),
                 batch.risk.as_str(),
                 batch.risk.as_str(),
@@ -210,9 +223,9 @@ while the files that could actually be damaged get individual attention.</p>\n")
         // Full path lists, collapsed, for the high-risk batches only. Listing
         // every path of every batch would make the page unreadably large.
         for batch in plan.batches.iter().filter(|b| b.risk.as_str() == "high") {
-            let _ = write!(
+            let _ = writeln!(
                 html,
-                "<details><summary>Paths in {} ({} files)</summary><div class=\"paths\">{}</div></details>\n",
+                "<details><summary>Paths in {} ({} files)</summary><div class=\"paths\">{}</div></details>",
                 escape(&batch.id),
                 batch.paths.len(),
                 escape(&batch.paths.join("\n"))
@@ -231,12 +244,18 @@ Nothing will be done to them until they are resolved.</p>\n",
         );
         let shown: Vec<_> = plan.blocked.iter().take(200).collect();
         html.push_str("<details open><summary>Show paths</summary><div class=\"paths\">");
-        html.push_str(&escape(&shown.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("\n")));
+        html.push_str(&escape(
+            &shown
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join("\n"),
+        ));
         html.push_str("</div></details>\n");
         if plan.blocked.len() > shown.len() {
-            let _ = write!(
+            let _ = writeln!(
                 html,
-                "<p class=\"sub\">…and {} more.</p>\n",
+                "<p class=\"sub\">…and {} more.</p>",
                 plan.blocked.len() - shown.len()
             );
         }
@@ -272,19 +291,21 @@ Nothing will be done to them until they are resolved.</p>\n",
         .iter()
         .filter(|f| f.decision == Decision::Transcode)
         .collect();
-    biggest.sort_by(|a, b| b.estimated_saving.cmp(&a.estimated_saving));
+    biggest.sort_by_key(|a| std::cmp::Reverse(a.estimated_saving));
 
     if !biggest.is_empty() {
-        html.push_str("<h2>Largest opportunities</h2>\n<table><thead><tr>\
+        html.push_str(
+            "<h2>Largest opportunities</h2>\n<table><thead><tr>\
 <th>Path</th><th>Format</th><th class=\"num\">Size</th>\
 <th class=\"num\">Est. after</th><th class=\"num\">Est. saving</th>\
-<th>Risk</th></tr></thead><tbody>\n");
+<th>Risk</th></tr></thead><tbody>\n",
+        );
         for file in biggest.iter().take(100) {
-            let _ = write!(
+            let _ = writeln!(
                 html,
                 "<tr><td>{}</td><td><code>{}</code></td><td class=\"num\">{}</td>\
 <td class=\"num\">{}</td><td class=\"num\">{}</td>\
-<td><span class=\"tag t-{}\">{}</span></td></tr>\n",
+<td><span class=\"tag t-{}\">{}</span></td></tr>",
                 escape(&file.path),
                 escape(&file.container),
                 human_bytes(file.size),
@@ -311,10 +332,10 @@ Review the batches above, then adjust <code>policy.toml</code> and re-run <code>
 }
 
 fn card(html: &mut String, key: &str, value: &str, note: &str) {
-    let _ = write!(
+    let _ = writeln!(
         html,
         "<div class=\"card\"><div class=\"k\">{}</div><div class=\"v\">{}</div>\
-<div class=\"n\">{}</div></div>\n",
+<div class=\"n\">{}</div></div>",
         escape(key),
         escape(value),
         escape(note)

@@ -86,6 +86,8 @@ fn main() -> Result<()> {
             let options = ScanOptions {
                 roots: roots.clone(),
                 force,
+                // Protect the run directory even when it sits inside a root.
+                skip_paths: vec![std::path::absolute(&run_dir.root).unwrap_or(run_dir.root.clone())],
                 ..ScanOptions::default()
             };
             println!("Walking {} root(s)…", roots.len());
@@ -115,7 +117,7 @@ fn main() -> Result<()> {
 
             let total = inventory.count()?;
             println!("\nInventory now holds {total} files.");
-            println!("Next: {}", "ma plan".to_string());
+            println!("Next: ma plan");
             println!("      edit {} first", run_dir.policy().display());
         }
 
@@ -198,10 +200,7 @@ fn main() -> Result<()> {
             if created {
                 println!("wrote {}", run_dir.policy().display());
             } else {
-                println!(
-                    "policy already exists: {}",
-                    run_dir.policy().display()
-                );
+                println!("policy already exists: {}", run_dir.policy().display());
             }
         }
 
@@ -216,11 +215,19 @@ fn main() -> Result<()> {
             }
             println!(
                 "policy   {}",
-                if run_dir.policy().exists() { "present" } else { "missing" }
+                if run_dir.policy().exists() {
+                    "present"
+                } else {
+                    "missing"
+                }
             );
             println!(
                 "report   {}",
-                if run_dir.report().exists() { "present" } else { "missing" }
+                if run_dir.report().exists() {
+                    "present"
+                } else {
+                    "missing"
+                }
             );
         }
     }
